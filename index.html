@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate STI Etch Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { background-color: #0B0F19; color: #E2E8F0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .panel { background-color: #1E293B; border-radius: 0.5rem; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0F172A; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body class="p-4 min-h-screen flex flex-col gap-4 overflow-auto">
+
+    <header class="panel p-4 flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-white tracking-wide flex items-center gap-2">
+                <span class="text-yellow-400">⚡</span> Ultimate STI Etch Optimization Dashboard
+            </h1>
+            <p class="text-sm text-gray-400 mt-1">프로파일 수치 표시 | 파티클 맵(정원 유지/겹침 표시) | 챔버 매칭 | 파티클 트렌드</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <label class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded cursor-pointer transition flex items-center gap-2 font-semibold">
+                Excel 데이터 업로드
+                <input type="file" id="excelUpload" accept=".xlsx, .xls" class="hidden">
+            </label>
+            <span id="fileNameDisplay" class="text-sm text-gray-500">데이터 대기중...</span>
+        </div>
+    </header>
+
+    <div id="welcomeMessage" class="flex-1 flex flex-col items-center justify-center text-gray-500 min-h-[60vh]">
+        <p class="text-xl">우측 상단의 버튼을 눌러 엑셀 파일을 업로드 해주세요.</p>
+    </div>
+
+    <div id="dashboardContent" class="hidden flex flex-col gap-4">
+        
+        <div class="flex gap-4">
+            <div class="panel p-4 flex items-center gap-4 bg-gray-800 shrink-0 border-l-4 border-purple-500">
+                <span class="text-gray-300 font-bold">🔍 분석할 레시피 :</span>
+                <select id="versionSelect" class="bg-gray-900 border border-gray-600 text-white rounded p-2 outline-none w-40 font-bold"></select>
+            </div>
+            <div class="grid grid-cols-4 gap-4 flex-1">
+                <div class="panel p-4 border-l-4 border-blue-500"><h3 class="text-gray-400 text-xs font-semibold">평균 수율</h3><p class="text-2xl font-bold text-white mt-1" id="kpi-yield">- %</p></div>
+                <div class="panel p-4 border-l-4 border-emerald-500"><h3 class="text-gray-400 text-xs font-semibold">평균 Depth</h3><p class="text-2xl font-bold text-white mt-1" id="kpi-depth">- Å</p></div>
+                <div class="panel p-4 border-l-4 border-yellow-500"><h3 class="text-gray-400 text-xs font-semibold">Depth 균일도</h3><p class="text-2xl font-bold text-white mt-1" id="kpi-unif">- %</p></div>
+                <div class="panel p-4 border-l-4 border-red-500"><h3 class="text-gray-400 text-xs font-semibold">평균 파티클/결함</h3><p class="text-2xl font-bold text-white mt-1" id="kpi-defect">- ea</p></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4">
+            
+            <div class="col-span-4 panel p-4 flex flex-col">
+                <h2 class="text-lg font-bold text-white mb-2">📐 Data-Driven Trench Profile</h2>
+                <div class="w-full flex-1 min-h-[300px] bg-white rounded p-2 border border-gray-700 relative">
+                    <canvas id="profileChart"></canvas>
+                </div>
+            </div>
+
+            <div class="col-span-3 panel p-4 flex flex-col gap-2 text-sm">
+                <h2 class="text-lg font-bold text-white mb-2">🛠️ Recipe Settings</h2>
+                <div class="bg-gray-900 p-3 rounded border border-gray-700">
+                    <h4 class="font-bold text-emerald-400 border-b border-gray-700 pb-1 mb-2">Step 1 (Main: SiO2)</h4>
+                    <p class="flex justify-between"><span>CHF3/C4F8:</span> <span id="s1-gas" class="text-white">-</span></p>
+                    <p class="flex justify-between"><span>RF Bias:</span> <span id="s1-rf" class="text-white">-</span></p>
+                </div>
+                <div class="bg-gray-900 p-3 rounded border border-gray-700">
+                    <h4 class="font-bold text-blue-400 border-b border-gray-700 pb-1 mb-2">Step 2 (Etch: PolySi)</h4>
+                    <p class="flex justify-between"><span>HBr/Cl2:</span> <span id="s2-gas" class="text-white">-</span></p>
+                    <p class="flex justify-between"><span>RF Bias:</span> <span id="s2-rf" class="text-white">-</span></p>
+                </div>
+                <div class="mt-2 bg-yellow-900/30 border border-yellow-700/50 rounded p-3 flex-1 overflow-auto">
+                    <h4 class="text-yellow-400 font-bold text-xs mb-1">📝 Change Notes</h4>
+                    <p id="recipe-note" class="text-sm text-gray-300">-</p>
+                </div>
+            </div>
+
+            <!-- ★ 수정됨: 캔버스 크기 제어 및 중앙 정렬 처리 -->
+            <div class="col-span-5 panel p-4 flex flex-col">
+                <h2 class="text-lg font-bold text-white mb-2">🦠 Wafer Particle Map</h2>
+                <p class="text-xs text-gray-400 mb-2">점이 클수록 해당 위치에 결함이 여러 개 겹쳐 발생했음을 의미합니다.</p>
+                <div class="flex-1 flex justify-center items-center h-[280px]">
+                    <div style="position: relative; height: 100%; width: 100%; max-width: 280px;">
+                        <canvas id="waferMapChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-span-6 panel p-4">
+                <h2 class="text-lg font-bold text-white mb-2">🎯 Wafer 공간 분포 (Inc. Extreme Edge)</h2>
+                <div class="w-full h-[250px]"><canvas id="zoneChart"></canvas></div>
+            </div>
+
+            <div class="col-span-6 panel p-4">
+                <h2 class="text-lg font-bold text-white mb-2">🏭 Chamber Matching (수율 & Depth)</h2>
+                <div class="w-full h-[250px]"><canvas id="chamberChart"></canvas></div>
+            </div>
+
+            <div class="col-span-12 panel p-4">
+                <h2 class="text-lg font-bold text-white mb-2">📉 레시피 진화에 따른 결함(Particle) 박멸 트렌드</h2>
+                <div class="w-full h-[200px]"><canvas id="particleTrendChart"></canvas></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let rawData = { master: [], summary: [], site: [] };
+        let profileChartObj, zoneChartObj, waferMapChartObj, chamberChartObj, particleTrendChartObj;
+
+        Chart.defaults.color = '#94A3B8';
+        Chart.defaults.font.family = "'Segoe UI', sans-serif";
+
+        document.getElementById('excelUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('fileNameDisplay').innerHTML = `<span class="text-emerald-400 font-bold">✅ ${file.name}</span>`;
+            document.getElementById('welcomeMessage').classList.add('hidden');
+            document.getElementById('dashboardContent').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                rawData.master = XLSX.utils.sheet_to_json(workbook.Sheets['Recipe_Master']);
+                rawData.summary = XLSX.utils.sheet_to_json(workbook.Sheets['Wafer_Summary']);
+                rawData.site = XLSX.utils.sheet_to_json(workbook.Sheets['Site_Level_Raw']);
+                initDashboard();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function initDashboard() {
+            const versionSelect = document.getElementById('versionSelect');
+            versionSelect.innerHTML = ''; 
+            
+            const versions = rawData.master.map(row => row.Recipe_Version);
+            versions.forEach(v => {
+                const option = document.createElement('option');
+                option.value = v;
+                option.text = v;
+                versionSelect.appendChild(option);
+            });
+
+            renderParticleTrend(versions);
+
+            versionSelect.value = versions[versions.length - 1]; 
+            versionSelect.addEventListener('change', (e) => updateSpecificVersion(e.target.value));
+            updateSpecificVersion(versionSelect.value);
+        }
+
+        function updateSpecificVersion(version) {
+            const targetWafers = rawData.summary.filter(w => w.Recipe_Version === version);
+            const targetSites = rawData.site.filter(s => s.Recipe_Version === version);
+            const recipe = rawData.master.find(r => r.Recipe_Version === version);
+
+            let ySum=0, dSum=0, uSum=0, dfSum=0;
+            if(targetWafers.length > 0) {
+                targetWafers.forEach(w => {
+                    ySum += parseFloat(w.Overall_Spec_Pass_Rate_pct)||0;
+                    dSum += parseFloat(w.Depth_Mean_A)||0;
+                    uSum += parseFloat(w.Depth_Uniformity_pct)||0;
+                    dfSum += parseFloat(w.Total_Defect_Count)||0;
+                });
+                const cnt = targetWafers.length;
+                document.getElementById('kpi-yield').textContent = (ySum/cnt).toFixed(1) + ' %';
+                document.getElementById('kpi-depth').textContent = (dSum/cnt).toFixed(0) + ' Å';
+                document.getElementById('kpi-unif').textContent = (uSum/cnt).toFixed(2) + ' %';
+                document.getElementById('kpi-defect').textContent = (dfSum/cnt).toFixed(1) + ' ea';
+            }
+
+            if(recipe) {
+                document.getElementById('s1-gas').textContent = `${recipe.S1_CHF3_sccm} / ${recipe.S1_C4F8_sccm}`;
+                document.getElementById('s1-rf').textContent = `${recipe.S1_RF_Bias_W} W`;
+                document.getElementById('s2-gas').textContent = `${recipe.S2_HBr_sccm} / ${recipe.S2_Cl2_sccm}`;
+                document.getElementById('s2-rf').textContent = `${recipe.S2_RF_Bias_W} W`;
+                document.getElementById('recipe-note').textContent = recipe.Change_Notes;
+            }
+
+            let avgTop = 0, avgMid = 0, avgBot = 0;
+            if(targetSites.length > 0) {
+                avgTop = targetSites.reduce((a, c) => a + (parseFloat(c.Top_CD_nm)||0), 0) / targetSites.length;
+                avgMid = targetSites.reduce((a, c) => a + (parseFloat(c.Mid_CD_nm)||0), 0) / targetSites.length;
+                avgBot = targetSites.reduce((a, c) => a + (parseFloat(c.Bottom_CD_nm)||0), 0) / targetSites.length;
+            }
+
+            renderSolidProfileChart(avgTop, avgMid, avgBot, (dSum/targetWafers.length)||0);
+            renderZoneChart(targetSites);
+            renderWaferMap(targetSites);
+            renderChamberChart(targetWafers);
+        }
+
+        function renderSolidProfileChart(topCD, midCD, botCD, depthAvg) {
+            if(profileChartObj) profileChartObj.destroy();
+            const ctx = document.getElementById('profileChart').getContext('2d');
+            
+            const customDrawPlugin = {
+                id: 'custom_trench_drawing',
+                beforeDraw: (chart) => {
+                    const ctx = chart.canvas.getContext('2d');
+                    const xAxis = chart.scales.x; const yAxis = chart.scales.y;
+                    ctx.save(); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, chart.width, chart.height);
+
+                    const getX = (val) => xAxis.getPixelForValue(val);
+                    const getY = (val) => yAxis.getPixelForValue(val);
+
+                    const yTop = 15; const yMid = 40; const yBot = 100; const maxEdge = 60;
+
+                    const drawLayer = (x1, y1, x2, y2, x3, y3, x4, y4, color) => {
+                        ctx.fillStyle = color; ctx.beginPath();
+                        ctx.moveTo(getX(x1), getY(y1)); ctx.lineTo(getX(x2), getY(y2));
+                        ctx.lineTo(getX(x3), getY(y3)); ctx.lineTo(getX(x4), getY(y4));
+                        ctx.closePath(); ctx.fill();
+                    };
+
+                    drawLayer(-maxEdge, yTop, -topCD/2, yTop, -midCD/2, yMid, -maxEdge, yMid, '#A7D9B4');
+                    drawLayer(-maxEdge, yMid, -midCD/2, yMid, -botCD/2, yBot, -maxEdge, yBot, '#83B0D2');
+                    drawLayer(topCD/2, yTop, maxEdge, yTop, maxEdge, yMid, midCD/2, yMid, '#A7D9B4');
+                    drawLayer(midCD/2, yMid, maxEdge, yMid, maxEdge, yBot, botCD/2, yBot, '#83B0D2');
+                    
+                    ctx.fillStyle = '#B3B3B3'; ctx.fillRect(getX(-maxEdge), getY(yBot), getX(maxEdge) - getX(-maxEdge), chart.height - getY(yBot));
+                    
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath();
+                    ctx.moveTo(getX(-topCD/2), getY(yTop)); ctx.lineTo(getX(-midCD/2), getY(yMid)); ctx.lineTo(getX(-botCD/2), getY(yBot));
+                    ctx.lineTo(getX(botCD/2), getY(yBot)); ctx.lineTo(getX(midCD/2), getY(yMid)); ctx.lineTo(getX(topCD/2), getY(yTop)); ctx.stroke();
+
+                    ctx.fillStyle = '#D92121'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+                    ctx.fillText(`Top CD: ${topCD.toFixed(1)} nm`, getX(0), getY(yTop) - 5);
+                    ctx.fillText(`Mid CD: ${midCD.toFixed(1)} nm`, getX(0), getY(yMid) + 4);
+                    ctx.fillText(`Bot CD: ${botCD.toFixed(1)} nm`, getX(0), getY(yBot) - 5);
+                    
+                    ctx.fillStyle = '#000080'; ctx.textAlign = 'left';
+                    ctx.fillText(`Depth:`, getX(maxEdge) - 40, getY((yTop+yBot)/2) - 8);
+                    ctx.fillText(`${depthAvg.toFixed(0)} Å`, getX(maxEdge) - 40, getY((yTop+yBot)/2) + 8);
+                    ctx.strokeStyle = '#000080'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(getX(maxEdge)-45, getY(yTop)); ctx.lineTo(getX(maxEdge)-45, getY(yBot)); ctx.stroke();
+                    ctx.restore();
+                }
+            };
+            profileChartObj = new Chart(ctx, {
+                type: 'scatter', data: { datasets: [] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { min: -50, max: 50, display: false }, y: { min: 0, max: 120, reverse: true, display: false } } },
+                plugins: [customDrawPlugin]
+            });
+        }
+
+        function renderZoneChart(targetSites) {
+            const calc = (zName) => {
+                const z = targetSites.filter(s => s.Zone === zName);
+                return z.length===0 ? [0,0,0] : [
+                    z.reduce((a, c) => a + (parseFloat(c.Top_CD_nm)||0), 0) / z.length,
+                    z.reduce((a, c) => a + (parseFloat(c.Mid_CD_nm)||0), 0) / z.length,
+                    z.reduce((a, c) => a + (parseFloat(c.Bottom_CD_nm)||0), 0) / z.length
+                ];
+            };
+            if(zoneChartObj) zoneChartObj.destroy();
+            zoneChartObj = new Chart(document.getElementById('zoneChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Top CD', 'Mid CD', 'Bottom CD'],
+                    datasets: [
+                        { label: 'Center', data: calc('Center'), backgroundColor: '#34D399' },
+                        { label: 'Mid', data: calc('Mid'), backgroundColor: '#60A5FA' },
+                        { label: 'Edge', data: calc('Edge'), backgroundColor: '#F472B6' },
+                        { label: 'Extreme Edge', data: calc('Extreme Edge'), backgroundColor: '#F59E0B' } 
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 30, max: 48, grid:{color:'#334155'} } }, plugins: { legend: { labels: { color: '#E2E8F0' } } } }
+            });
+        }
+
+        // ★ [수정됨] 겹치는 좌표 합산(버블 크기화) 및 정원(aspectRatio) 처리 ★
+        function renderWaferMap(targetSites) {
+            // 좌표를 문자열 키(예: "0.5,0.5")로 묶어서 동일 위치 결함 횟수를 계산
+            const aggregateCoordinates = (type) => {
+                const coordMap = {};
+                targetSites.forEach(s => {
+                    if(s.Anomaly_Event === type) {
+                        const r = parseFloat(s.Radius_frac) || 0;
+                        const theta = parseFloat(s.Angle_deg) || 0;
+                        const rad = theta * Math.PI / 180;
+                        const x = (r * Math.cos(rad)).toFixed(3);
+                        const y = (r * Math.sin(rad)).toFixed(3);
+                        const key = `${x},${y}`;
+                        
+                        if(coordMap[key]) coordMap[key].count += 1;
+                        else coordMap[key] = { x: parseFloat(x), y: parseFloat(y), count: 1 };
+                    }
+                });
+                
+                // 버블 차트용 배열로 변환
+                return Object.values(coordMap).map(pt => ({
+                    x: pt.x,
+                    y: pt.y,
+                    r: 4 + (pt.count * 2) // 기본 크기 4 + 중복 1건당 2px씩 커짐
+                }));
+            };
+
+            const polyData = aggregateCoordinates('polymer_residue_particle');
+            const randData = aggregateCoordinates('baseline_random_particle');
+
+            // 실제 중복을 포함한 총 결함 개수 계산 (툴팁 및 디버깅용)
+            const polyCount = polyData.reduce((sum, pt) => sum + (pt.r - 4)/2, 0) + polyData.length;
+            const randCount = randData.reduce((sum, pt) => sum + (pt.r - 4)/2, 0) + randData.length;
+
+            if(waferMapChartObj) waferMapChartObj.destroy();
+            
+            // ★ 수정: scatter 대신 bubble 차트 사용 (반지름 r 값으로 크기 조절)
+            waferMapChartObj = new Chart(document.getElementById('waferMapChart').getContext('2d'), {
+                type: 'bubble', 
+                data: {
+                    datasets: [
+                        {
+                            label: `Polymer (총 ${polyCount}개)`,
+                            data: polyData,
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)', // 겹침 확인을 위해 약간 투명도 적용
+                            borderColor: '#EF4444'
+                        },
+                        {
+                            label: `Random (총 ${randCount}개)`,
+                            data: randData,
+                            backgroundColor: 'rgba(234, 179, 8, 0.7)',
+                            borderColor: '#EAB308'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: true, // ★ 부모 요소가 늘어나도 비율 강제 유지
+                    aspectRatio: 1,            // ★ 완벽한 1:1 정사각형(원형) 캔버스 강제
+                    scales: {
+                        x: { min: -1.1, max: 1.1, display: false },
+                        y: { min: -1.1, max: 1.1, display: false }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#E2E8F0', usePointStyle: true } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    // 역계산: r = 4 + (count * 2) -> count = (r - 4) / 2
+                                    const count = (context.raw.r - 4) / 2;
+                                    return `${context.dataset.label.split(' ')[0]} 결함 ${count}개 겹침`;
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'draw_wafer_circle',
+                    beforeDraw: (chart) => {
+                        const ctx = chart.canvas.getContext('2d');
+                        const xAxis = chart.scales.x; const yAxis = chart.scales.y;
+                        const centerX = xAxis.getPixelForValue(0); const centerY = yAxis.getPixelForValue(0);
+                        // 완벽한 원을 그리기 위해 가로/세로 중 작은 픽셀 기준 반경 채택
+                        const radiusX = Math.abs(xAxis.getPixelForValue(1) - centerX);
+                        const radiusY = Math.abs(yAxis.getPixelForValue(1) - centerY);
+                        const radius = Math.min(radiusX, radiusY);
+                        
+                        ctx.save();
+                        ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#1E293B'; ctx.fill(); 
+                        ctx.strokeStyle = '#475569'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(centerX, centerY - radius); ctx.lineTo(centerX, centerY + radius); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(centerX - radius, centerY); ctx.lineTo(centerX + radius, centerY); ctx.stroke();
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        function renderChamberChart(targetWafers) {
+            const chambers = ['CH-A', 'CH-B', 'CH-C', 'CH-D'];
+            const yieldData = []; const depthData = [];
+            chambers.forEach(ch => {
+                const wafers = targetWafers.filter(w => w.Chamber_ID === ch);
+                if(wafers.length > 0) {
+                    yieldData.push(wafers.reduce((a,c) => a + (parseFloat(c.Overall_Spec_Pass_Rate_pct)||0), 0) / wafers.length);
+                    depthData.push(wafers.reduce((a,c) => a + (parseFloat(c.Depth_Mean_A)||0), 0) / wafers.length);
+                } else { yieldData.push(0); depthData.push(0); }
+            });
+
+            if(chamberChartObj) chamberChartObj.destroy();
+            chamberChartObj = new Chart(document.getElementById('chamberChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: chambers,
+                    datasets: [
+                        { label: '평균 Depth (Å)', data: depthData, type: 'line', borderColor: '#10B981', borderWidth: 3, pointBackgroundColor: '#fff', yAxisID: 'y1', order: 1 },
+                        { label: '수율 (Yield %)', data: yieldData, backgroundColor: '#3B82F6', yAxisID: 'y', order: 2 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#E2E8F0', usePointStyle: true } } }, scales: { y: { type: 'linear', position: 'left', min: 0, max: 100, title: { display: true, text: 'Yield (%)', color: '#94A3B8' }, grid: { color: '#334155' } }, y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, min: 1450, max: 1650, title: { display: true, text: 'Depth (Å)', color: '#94A3B8' } } } }
+            });
+        }
+
+        function renderParticleTrend(versions) {
+            const polyData = []; const randData = [];
+            versions.forEach(v => {
+                const sites = rawData.site.filter(s => s.Recipe_Version === v);
+                const poly = sites.filter(s => s.Anomaly_Event === 'polymer_residue_particle').length;
+                const rand = sites.filter(s => s.Anomaly_Event === 'baseline_random_particle').length;
+                polyData.push(poly); randData.push(rand);
+            });
+
+            if(particleTrendChartObj) particleTrendChartObj.destroy();
+            particleTrendChartObj = new Chart(document.getElementById('particleTrendChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: versions,
+                    datasets: [
+                        { label: 'Polymer Residue (폴리머 찌꺼기)', data: polyData, backgroundColor: '#EF4444' },
+                        { label: 'Baseline Random (랜덤 먼지)', data: randData, backgroundColor: '#EAB308' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#E2E8F0' } } }, scales: { x: { stacked: true, grid: { color: '#334155' } }, y: { stacked: true, grid: { color: '#334155' } } } }
+            });
+        }
+    </script>
+</body>
+</html>
